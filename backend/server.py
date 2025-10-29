@@ -1981,8 +1981,8 @@ async def get_players(
                     SUM(ws.targets) as targets,
                     SUM(ws.fumbles_lost) as fumbles_lost,
                     SUM(ws.fantasy_points) as fantasy_points,
-                    AVG(COALESCE(sc.offense_snaps, CAST(ws.snap_percentage * 100 AS INTEGER))) as snap_percentage,
-                    SUM(COALESCE(sc.offense_snaps, 0)) as snap_count,
+                    AVG(CASE WHEN sc.offense_snaps IS NOT NULL THEN sc.offense_pct ELSE NULL END) as snap_percentage,
+                    SUM(CASE WHEN sc.offense_snaps IS NOT NULL THEN sc.offense_snaps ELSE 0 END) as snap_count,
                     NULL as dk_salary
                 FROM weekly_stats ws
                 LEFT JOIN skill_snap_counts sc ON (
