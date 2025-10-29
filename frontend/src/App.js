@@ -68,7 +68,9 @@ const FantasyDashboard = () => {
   const [selectedPlayerType, setSelectedPlayerType] = useState('all');
   const [filters, setFilters] = useState({
     season: '2025',
-    week: '4',  // Start with Week 4 to match reference image
+    week: '4',  // Single week selection (for backward compatibility)
+    weekStart: null,  // Start of week range
+    weekEnd: null,    // End of week range
     position: 'QB',
     team: 'all',
     minSalary: '',
@@ -642,12 +644,27 @@ const FantasyDashboard = () => {
   const fetchPlayers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API}/players`, { 
-        params: { 
-          ...filters, 
-          limit: 1000 
-        } 
-      });
+      
+      // Build params based on whether we're using week range or single week
+      const params = {
+        season: filters.season,
+        position: filters.position !== 'all' ? filters.position : undefined,
+        team: filters.team !== 'all' ? filters.team : undefined,
+        limit: 1000
+      };
+      
+      // Add week parameters based on selection
+      if (filters.weekStart && filters.weekEnd) {
+        // Week range mode
+        params.week_start = filters.weekStart;
+        params.week_end = filters.weekEnd;
+      } else if (filters.week && filters.week !== 'all') {
+        // Single week mode
+        params.week = filters.week;
+      }
+      // If week is 'all' or not set, don't add any week parameter
+      
+      const response = await axios.get(`${API}/players`, { params });
       
       const playersData = response.data || [];
       setPlayers(playersData);
@@ -967,10 +984,16 @@ const FantasyDashboard = () => {
         limit: 1000
       };
       
-      // Add week if not 'all'
-      if (filterParams.week && filterParams.week !== 'all') {
+      // Add week parameters based on selection mode
+      if (filterParams.weekStart && filterParams.weekEnd) {
+        // Week range mode
+        cleanParams.week_start = filterParams.weekStart;
+        cleanParams.week_end = filterParams.weekEnd;
+      } else if (filterParams.week && filterParams.week !== 'all') {
+        // Single week mode
         cleanParams.week = filterParams.week;
       }
+      // If week is 'all' or not set, don't add any week parameter
       
       // Add position if not 'all'
       if (filterParams.position && filterParams.position !== 'all') {
@@ -1178,20 +1201,132 @@ const FantasyDashboard = () => {
 
                       {/* Week Range */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Week</label>
-                        <Select value={filters.week} onValueChange={(value) => handleFilterChange('week', value)}>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="4" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                            {Array.from({length: 18}, (_, i) => (
-                              <SelectItem key={i + 1} value={(i + 1).toString()}>
-                                {i + 1}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Week Range
+                        </label>
+                        <div className="space-y-2">
+                          {/* Toggle between single week and range */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <Button
+                              size="sm"
+                              variant={!filters.weekStart ? "default" : "outline"}
+                              className="h-7 px-2 py-0 text-xs"
+                              onClick={() => {
+                                setFilters(prev => ({
+                                  ...prev,
+                                  weekStart: null,
+                                  weekEnd: null,
+                                  week: '4'
+                                }));
+                              }}
+                            >
+                              Single
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={filters.weekStart ? "default" : "outline"}
+                              className="h-7 px-2 py-0 text-xs"
+                              onClick={() => {
+                                setFilters(prev => ({
+                                  ...prev,
+                                  weekStart: '1',
+                                  weekEnd: '4',
+                                  week: null
+                                }));
+                              }}
+                            >
+                              Range
+                            </Button>
+                          </div>
+                          
+                          {/* Single week selector */}
+                          {!filters.weekStart && (
+                            <Select 
+                              value={filters.week} 
+                              onValueChange={(value) => {
+                                setFilters(prev => ({
+                                  ...prev,
+                                  week: value,
+                                  weekStart: null,
+                                  weekEnd: null
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Week" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Weeks</SelectItem>
+                                {Array.from({length: 18}, (_, i) => (
+                                  <SelectItem key={i + 1} value={(i + 1).toString()}>
+                                    Week {i + 1}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          
+                          {/* Week range selectors */}
+                          {filters.weekStart && (
+                            <div className="flex gap-2">
+                              <Select 
+                                value={filters.weekStart} 
+                                onValueChange={(value) => {
+                                  setFilters(prev => ({
+                                    ...prev,
+                                    weekStart: value,
+                                    // Ensure end week is not less than start week
+                                    weekEnd: prev.weekEnd && parseInt(prev.weekEnd) < parseInt(value) 
+                                      ? value 
+                                      : prev.weekEnd
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="h-10 flex-1">
+                                  <SelectValue placeholder="From" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({length: 18}, (_, i) => (
+                                    <SelectItem key={i + 1} value={(i + 1).toString()}>
+                                      {i + 1}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              
+                              <span className="flex items-center text-gray-500">to</span>
+                              
+                              <Select 
+                                value={filters.weekEnd} 
+                                onValueChange={(value) => {
+                                  setFilters(prev => ({
+                                    ...prev,
+                                    weekEnd: value,
+                                    // Ensure start week is not greater than end week
+                                    weekStart: prev.weekStart && parseInt(prev.weekStart) > parseInt(value) 
+                                      ? value 
+                                      : prev.weekStart
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="h-10 flex-1">
+                                  <SelectValue placeholder="To" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({length: 18}, (_, i) => (
+                                    <SelectItem 
+                                      key={i + 1} 
+                                      value={(i + 1).toString()}
+                                      disabled={filters.weekStart && (i + 1) < parseInt(filters.weekStart)}
+                                    >
+                                      {i + 1}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Position Filter */}

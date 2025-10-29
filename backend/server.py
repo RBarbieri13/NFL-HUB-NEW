@@ -134,7 +134,7 @@ class PlayerStats(BaseModel):
     position: str
     team: str
     season: int
-    week: int
+    week: Optional[int] = None
     opponent: Optional[str] = None
     passing_yards: Optional[float] = 0
     passing_tds: Optional[int] = 0
@@ -146,7 +146,7 @@ class PlayerStats(BaseModel):
     receiving_tds: Optional[int] = 0
     fumbles_lost: Optional[int] = 0
     fantasy_points: Optional[float] = 0
-    snap_percentage: Optional[int] = None
+    snap_percentage: Optional[float] = None
     snap_count: Optional[int] = None
     targets: Optional[int] = 0
     dk_salary: Optional[int] = None
@@ -1947,71 +1947,134 @@ async def get_nfl_teams():
 async def get_players(
     season: Optional[int] = Query(None, description="Season year (2024, 2025)"),
     week: Optional[int] = Query(None, description="Week number (1-18)"),
+    week_start: Optional[int] = Query(None, description="Start week for cumulative range"),
+    week_end: Optional[int] = Query(None, description="End week for cumulative range"),
     position: Optional[str] = Query(None, description="Position (QB, RB, WR, TE)"),
     team: Optional[str] = Query(None, description="Team abbreviation"),
     limit: int = Query(500, description="Maximum number of records to return"),
     offset: int = Query(0, description="Number of records to skip")
 ):
-    """Get player statistics with optional filters"""
+    """Get player statistics with optional filters. Supports cumulative stats across week ranges."""
     try:
-        query = """
-            SELECT 
-                ws.player_id,
-                ws.player_name,
-                ws.position,
-                ws.team,
-                ws.season,
-                ws.week,
-                ws.opponent,
-                ws.passing_yards,
-                ws.passing_tds,
-                ws.interceptions,
-                ws.rushing_yards,
-                ws.rushing_tds,
-                ws.receptions,
-                ws.receiving_yards,
-                ws.receiving_tds,
-                ws.targets,
-                ws.fumbles_lost,
-                ws.fantasy_points,
-                COALESCE(sc.offense_snaps, CAST(ws.snap_percentage * 100 AS INTEGER)) as snap_percentage,
-                COALESCE(sc.offense_snaps, 0) as snap_count,
-                COALESCE(dp.salary, NULL) as dk_salary
-            FROM weekly_stats ws
-            LEFT JOIN skill_snap_counts sc ON (
-                -- Primary match: exact name matching
-                (LOWER(TRIM(ws.player_name)) = LOWER(TRIM(sc.player_name))) OR
-                -- Secondary match: normalized names (remove Jr/Sr suffixes and punctuation)
-                (LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(ws.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))) = 
-                 LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(sc.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))))
-            ) AND ws.season = sc.season AND ws.week = sc.week
-            LEFT JOIN draftkings_pricing dp ON LOWER(TRIM(ws.player_name)) = LOWER(TRIM(dp.player_name))
-                AND ws.team = dp.team
-                AND ws.season = dp.season 
-                AND ws.week = dp.week
-            WHERE 1=1
-        """
+        # Determine if we're doing a week range query
+        is_range_query = week_start is not None and week_end is not None
         
-        params = []
-        
-        if season:
-            query += " AND ws.season = ?"
-            params.append(season)
-        
-        if week:
-            query += " AND ws.week = ?"
-            params.append(week)
-        
-        if position:
-            query += " AND ws.position = ?"
-            params.append(position.upper())
-        
-        if team:
-            query += " AND ws.team = ?"
-            params.append(team.upper())
-        
-        query += " ORDER BY ws.fantasy_points DESC, ws.player_name"
-        query += f" LIMIT {limit} OFFSET {offset}"
+        if is_range_query:
+            # Cumulative query for week ranges
+            query = """
+                SELECT 
+                    ws.player_id,
+                    ws.player_name,
+                    ws.position,
+                    ws.team,
+                    ws.season,
+                    NULL as week,
+                    NULL as opponent,
+                    SUM(ws.passing_yards) as passing_yards,
+                    SUM(ws.passing_tds) as passing_tds,
+                    SUM(ws.interceptions) as interceptions,
+                    SUM(ws.rushing_yards) as rushing_yards,
+                    SUM(ws.rushing_tds) as rushing_tds,
+                    SUM(ws.receptions) as receptions,
+                    SUM(ws.receiving_yards) as receiving_yards,
+                    SUM(ws.receiving_tds) as receiving_tds,
+                    SUM(ws.targets) as targets,
+                    SUM(ws.fumbles_lost) as fumbles_lost,
+                    SUM(ws.fantasy_points) as fantasy_points,
+                    AVG(COALESCE(sc.offense_snaps, CAST(ws.snap_percentage * 100 AS INTEGER))) as snap_percentage,
+                    SUM(COALESCE(sc.offense_snaps, 0)) as snap_count,
+                    NULL as dk_salary
+                FROM weekly_stats ws
+                LEFT JOIN skill_snap_counts sc ON (
+                    (LOWER(TRIM(ws.player_name)) = LOWER(TRIM(sc.player_name))) OR
+                    (LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(ws.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))) = 
+                     LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(sc.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))))
+                ) AND ws.season = sc.season AND ws.week = sc.week
+                WHERE 1=1
+            """
+            
+            params = []
+            
+            if season:
+                query += " AND ws.season = ?"
+                params.append(season)
+            
+            # Add week range filter
+            query += " AND ws.week >= ? AND ws.week <= ?"
+            params.append(week_start)
+            params.append(week_end)
+            
+            if position:
+                query += " AND ws.position = ?"
+                params.append(position.upper())
+            
+            if team:
+                query += " AND ws.team = ?"
+                params.append(team.upper())
+            
+            # Group by player for aggregation
+            query += " GROUP BY ws.player_id, ws.player_name, ws.position, ws.team, ws.season"
+            query += " ORDER BY fantasy_points DESC, ws.player_name"
+            query += f" LIMIT {limit} OFFSET {offset}"
+            
+        else:
+            # Original single-week or all-weeks query
+            query = """
+                SELECT 
+                    ws.player_id,
+                    ws.player_name,
+                    ws.position,
+                    ws.team,
+                    ws.season,
+                    ws.week,
+                    ws.opponent,
+                    ws.passing_yards,
+                    ws.passing_tds,
+                    ws.interceptions,
+                    ws.rushing_yards,
+                    ws.rushing_tds,
+                    ws.receptions,
+                    ws.receiving_yards,
+                    ws.receiving_tds,
+                    ws.targets,
+                    ws.fumbles_lost,
+                    ws.fantasy_points,
+                    COALESCE(sc.offense_snaps, CAST(ws.snap_percentage * 100 AS INTEGER)) as snap_percentage,
+                    COALESCE(sc.offense_snaps, 0) as snap_count,
+                    COALESCE(dp.salary, NULL) as dk_salary
+                FROM weekly_stats ws
+                LEFT JOIN skill_snap_counts sc ON (
+                    (LOWER(TRIM(ws.player_name)) = LOWER(TRIM(sc.player_name))) OR
+                    (LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(ws.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))) = 
+                     LOWER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(sc.player_name, '\\s+(Jr\\.?|Sr\\.?|III|II|IV)\\s*$', '', 'i'), '\\.', '', 'g'))))
+                ) AND ws.season = sc.season AND ws.week = sc.week
+                LEFT JOIN draftkings_pricing dp ON LOWER(TRIM(ws.player_name)) = LOWER(TRIM(dp.player_name))
+                    AND ws.team = dp.team
+                    AND ws.season = dp.season 
+                    AND ws.week = dp.week
+                WHERE 1=1
+            """
+            
+            params = []
+            
+            if season:
+                query += " AND ws.season = ?"
+                params.append(season)
+            
+            if week:
+                query += " AND ws.week = ?"
+                params.append(week)
+            
+            if position:
+                query += " AND ws.position = ?"
+                params.append(position.upper())
+            
+            if team:
+                query += " AND ws.team = ?"
+                params.append(team.upper())
+            
+            query += " ORDER BY ws.fantasy_points DESC, ws.player_name"
+            query += f" LIMIT {limit} OFFSET {offset}"
         
         result = conn.execute(query, params).fetchall()
         columns = [desc[0] for desc in conn.description]
