@@ -89,7 +89,11 @@ const FantasyDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'fantasy_points', direction: 'desc' });
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [favorites, setFavorites] = useState([]);
+  const [favorites, setFavorites] = useState(() => {
+    const saved = localStorage.getItem('nfl-hub-favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [activeTab, setActiveTab] = useState('data-table');
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
@@ -360,7 +364,7 @@ const FantasyDashboard = () => {
           }
         },
         {
-          headerName: '# Snaps',
+          headerName: 'Snap %',
           field: 'snap_percentage',
           width: 70,
           type: 'numericColumn',
@@ -697,8 +701,14 @@ const FantasyDashboard = () => {
       );
     }
     
+    if (showFavoritesOnly) {
+      filtered = filtered.filter(player => 
+        favorites.includes(player.player_id || `${player.player_name}-${player.team}`)
+      );
+    }
+    
     return filtered;
-  }, [players, searchTerm, selectedPlayerType]);
+  }, [players, searchTerm, selectedPlayerType, showFavoritesOnly, favorites]);
 
   // Get active filters for display
   const getActiveFilters = () => {
@@ -746,6 +756,10 @@ const FantasyDashboard = () => {
       return newFavorites;
     });
   };
+
+  useEffect(() => {
+    localStorage.setItem('nfl-hub-favorites', JSON.stringify(favorites));
+  }, [favorites]);
 
   // Keyboard shortcuts
   const handleKeyboardShortcuts = useCallback((event) => {
@@ -1463,10 +1477,14 @@ const FantasyDashboard = () => {
                     <div className="flex items-center space-x-2">
                       <Button 
                         size="sm" 
-                        className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white border-0 shadow-lg text-xs h-8 px-3"
+                        className={`${showFavoritesOnly 
+                          ? 'bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700' 
+                          : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                        } text-white border-0 shadow-lg text-xs h-8 px-3`}
+                        onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
                       >
-                        <Star className="h-3 w-3 mr-1" />
-                        Favorites
+                        <Star className={`h-3 w-3 mr-1 ${showFavoritesOnly ? 'fill-current' : ''}`} />
+                        {showFavoritesOnly ? `Favorites (${favorites.length})` : 'Show Favorites'}
                       </Button>
                       <Button 
                         size="sm" 
@@ -2081,13 +2099,13 @@ const FantasyDashboard = () => {
                                         <React.Fragment key={week}>
                                           {trendViewMode === 'summary' ? (
                                             <>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5 border-l-4 border-gray-900" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5 border-l-4 border-gray-900" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData?.dk_salary ? `$${(weekData.dk_salary/1000).toFixed(1)}k` : '-'}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '2px solid #9CA3AF'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '2px solid #9CA3AF'}}>
                                                 {weekData?.snap_count || weekData?.snap_percentage || '-'}
                                               </td>
-                                              <td className={`text-center text-[14px] py-0.5.5 font-semibold border-r-4 border-gray-900 ${
+                                              <td className={`text-center text-[14px] py-0.5 font-semibold border-r-4 border-gray-900 ${
                                                 fantasyPoints >= 25 ? 'bg-green-100 text-green-800' :
                                                 fantasyPoints >= 20 ? 'bg-green-50 text-green-700' :
                                                 fantasyPoints >= 15 ? 'bg-yellow-50 text-yellow-700' :
@@ -2099,37 +2117,37 @@ const FantasyDashboard = () => {
                                             </>
                                           ) : (
                                             <>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5 border-l-4 border-gray-900" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5 border-l-4 border-gray-900" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData?.dk_salary ? `$${(weekData.dk_salary/1000).toFixed(1)}k` : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '2px solid #9CA3AF'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '2px solid #9CA3AF'}}>
                                                 {weekData?.snap_count || weekData?.snap_percentage || ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.passing_yards > 0 ? passingCompletions : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.passing_yards > 0 ? passingAttempts : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.passing_yards > 0 ? weekData.passing_yards : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.passing_tds > 0 ? weekData.passing_tds : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '2px solid #9CA3AF'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '2px solid #9CA3AF'}}>
                                                 {weekData && weekData.interceptions > 0 ? weekData.interceptions : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.rushing_yards > 0 ? rushingAttempts : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '1px solid #D1D5DB'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '1px solid #D1D5DB'}}>
                                                 {weekData && weekData.rushing_yards > 0 ? weekData.rushing_yards : ''}
                                               </td>
-                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5.5" style={{borderRight: '2px solid #9CA3AF'}}>
+                                              <td className="text-center text-[14px] text-gray-900 bg-white py-0.5" style={{borderRight: '2px solid #9CA3AF'}}>
                                                 {weekData && weekData.rushing_tds > 0 ? weekData.rushing_tds : ''}
                                               </td>
-                                              <td className={`text-center text-[14px] py-0.5.5 font-semibold border-r-4 border-gray-900 ${
+                                              <td className={`text-center text-[14px] py-0.5 font-semibold border-r-4 border-gray-900 ${
                                                 fantasyPoints >= 25 ? 'bg-green-100 text-green-800' :
                                                 fantasyPoints >= 20 ? 'bg-green-50 text-green-700' :
                                                 fantasyPoints >= 15 ? 'bg-yellow-50 text-yellow-700' :
