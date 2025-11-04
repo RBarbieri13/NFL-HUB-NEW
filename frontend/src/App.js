@@ -14,6 +14,7 @@ import { RefreshCw, TrendingUp, Users, Calendar, Search, Filter, Star, BarChart3
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import OptimizerFilter from './components/OptimizerFilter';
+import MenuWiseSidebar from './components/layout/MenuWiseSidebar';
 import '@/App.css';
 
 // Register AG Grid modules
@@ -995,11 +996,21 @@ const FantasyDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="flex h-screen bg-gray-50">
       <Toaster position="top-right" />
       
-      {/* Professional Header with Texture */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b-4 border-blue-500">
+      {/* MenuWise Sidebar - New */}
+      <div className="w-72 flex-shrink-0">
+        <MenuWiseSidebar 
+          activeRoute={location.pathname}
+          onNavigate={(path) => navigate(path)}
+        />
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Professional Header with Texture */}
+        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b-4 border-blue-500">
         <div className="relative overflow-hidden">
           {/* Texture overlay */}
           <div className="absolute inset-0 bg-black/20 bg-[radial-gradient(circle_at_20%_80%,_rgba(120,_119,_198,_0.3),_transparent_50%)]"></div>
@@ -1056,18 +1067,18 @@ const FantasyDashboard = () => {
         </div>
       </div>
 
-      {/* Optimizer Filter Component */}
-      <OptimizerFilter
-        isVisible={showOptimizerFilter}
-        onClose={() => setShowOptimizerFilter(false)}
-        currentPosition={filters.position}
-        currentWeek={filters.week}
-        onPositionChange={(position) => setFilters(prev => ({ ...prev, position }))}
-        onWeekChange={(week) => setFilters(prev => ({ ...prev, week }))}
-      />
+        {/* Optimizer Filter Component */}
+        <OptimizerFilter
+          isVisible={showOptimizerFilter}
+          onClose={() => setShowOptimizerFilter(false)}
+          currentPosition={filters.position}
+          currentWeek={filters.week}
+          onPositionChange={(position) => setFilters(prev => ({ ...prev, position }))}
+          onWeekChange={(week) => setFilters(prev => ({ ...prev, week }))}
+        />
 
-      {/* Main Content Area - Full Width */}
-      <div className="flex-1 overflow-hidden">
+        {/* Content Area - Full Width */}
+        <div className="flex-1 overflow-hidden">
         {/* Tab Navigation */}
         <div className="bg-white border-b border-gray-200 px-6 py-2">
           <div className="flex space-x-8">
@@ -2482,6 +2493,7 @@ const FantasyDashboard = () => {
             </Card>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
