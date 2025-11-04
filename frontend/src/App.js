@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
@@ -59,14 +59,13 @@ const NFL_TEAMS = {
 };
 
 const FantasyDashboard = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [gridApi, setGridApi] = useState(null);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingPricing, setLoadingPricing] = useState(false);
-  const [loadingSnapCounts, setLoadingSnapCounts] = useState(false);
-  const [summary, setSummary] = useState(null);
-  const [selectedPlayerType, setSelectedPlayerType] = useState('all');
   const [filters, setFilters] = useState({
     season: '2025',
     week: '4',  // Single week selection (for backward compatibility)
@@ -82,7 +81,6 @@ const FantasyDashboard = () => {
   const [isPPR, setIsPPR] = useState(true); // true = full PPR, false = half PPR
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
-  const [playerDetailWidth, setPlayerDetailWidth] = useState(30); // percentage
   const [playerGameHistory, setPlayerGameHistory] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280); // pixels
@@ -92,7 +90,11 @@ const FantasyDashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
-  const [activeTab, setActiveTab] = useState('data-table');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Initialize from URL path
+    if (location.pathname === '/trend-tool') return 'trend-tool';
+    return 'data-table';
+  });
   const [filtersCollapsed, setFiltersCollapsed] = useState(false);
   
   // Trend Tool state
@@ -113,10 +115,28 @@ const FantasyDashboard = () => {
   });
   
   // New states for Trend Tool enhancements
-  const [trendViewMode, setTrendViewMode] = useState('summary'); // 'summary' or 'full'
   const [trendFiltersCollapsed, setTrendFiltersCollapsed] = useState(false);
   
   const [showOptimizerFilter, setShowOptimizerFilter] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'data-table' && location.pathname !== '/data-table') {
+      navigate('/data-table', { replace: true });
+    } else if (activeTab === 'trend-tool' && location.pathname !== '/trend-tool') {
+      navigate('/trend-tool', { replace: true });
+    }
+  }, [activeTab, navigate, location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/trend-tool' && activeTab !== 'trend-tool') {
+      setActiveTab('trend-tool');
+    } else if (location.pathname === '/data-table' && activeTab !== 'data-table') {
+      setActiveTab('data-table');
+    } else if (location.pathname === '/' && activeTab !== 'data-table') {
+      setActiveTab('data-table');
+      navigate('/data-table', { replace: true });
+    }
+  }, [location.pathname, activeTab, navigate]);
 
   // Calculate fantasy points based on PPR setting
   const calculateFantasyPoints = (player) => {
@@ -293,26 +313,11 @@ const FantasyDashboard = () => {
         const playerTeam = params.data.team;
         const week = params.data.week;
         
-        // Mock scores for Week 4 2025 games (since they "already happened")
-        const gameScores = {
-          'DAL-GB': 'W 31-17', 'GB-DAL': 'L 17-31',
-          'KC-BAL': 'W 27-20', 'BAL-KC': 'L 20-27',
-          'BUF-NO': 'W 35-14', 'NO-BUF': 'L 14-35',
-          'CIN-DEN': 'W 24-21', 'DEN-CIN': 'L 21-24',
-          'CAR-NE': 'L 13-28', 'NE-CAR': 'W 28-13',
-          'TEN-HOU': 'L 17-24', 'HOU-TEN': 'W 24-17'
-        };
-        
-        const gameKey = `${playerTeam}-${opponent}`;
-        const score = gameScores[gameKey] || `vs ${opponent}`;
-        const isWin = score.startsWith('W');
-        const isLoss = score.startsWith('L');
+        const score = `vs ${opponent}`;
         
         return (
           <div className="py-1 px-2">
-            <div className={`text-xs font-semibold ${
-              isWin ? 'text-green-600' : isLoss ? 'text-red-600' : 'text-gray-700'
-            }`}>
+            <div className="text-xs font-semibold text-gray-700">
               {score}
             </div>
             <div className="text-xs text-gray-500">
@@ -599,49 +604,6 @@ const FantasyDashboard = () => {
     animateRows: false
   }), []);
 
-  // Load historical DraftKings pricing
-  const loadHistoricalPricing = async () => {
-    setLoadingPricing(true);
-    try {
-      toast.info('Loading historical DraftKings pricing data...');
-      const response = await axios.post(`${API}/load-historical-pricing`);
-      
-      if (response.data.success) {
-        toast.success(`Successfully loaded ${response.data.records_processed} pricing records`);
-        await fetchSummary();
-        await fetchPlayers();
-      } else {
-        toast.error('Failed to load historical pricing data');
-      }
-    } catch (error) {
-      console.error('Error loading historical pricing:', error);
-      toast.error('Failed to load historical DraftKings pricing');
-    } finally {
-      setLoadingPricing(false);
-    }
-  };
-
-  // Load snap counts for 2024 and 2025
-  const loadSnapCounts = async () => {
-    setLoadingSnapCounts(true);
-    try {
-      toast.info('Loading snap counts for 2024 and 2025...');
-      const response = await axios.post(`${API}/load-snap-counts?seasons=2024&seasons=2025`);
-      
-      if (response.data.success) {
-        toast.success(`Successfully loaded ${response.data.records_loaded} snap count records`);
-        await fetchSummary();
-        await fetchPlayers();
-      } else {
-        toast.error('Failed to load snap counts');
-      }
-    } catch (error) {
-      console.error('Error loading snap counts:', error);
-      toast.error('Failed to load snap counts data');
-    } finally {
-      setLoadingSnapCounts(false);
-    }
-  };
 
   // Fetch players data
   const fetchPlayers = async () => {
@@ -693,15 +655,8 @@ const FantasyDashboard = () => {
       );
     }
     
-    // Apply position filter from player type buttons
-    if (selectedPlayerType && selectedPlayerType !== 'all') {
-      filtered = filtered.filter(player => 
-        player.position.toLowerCase() === selectedPlayerType
-      );
-    }
-    
     return filtered;
-  }, [players, searchTerm, selectedPlayerType]);
+  }, [players, searchTerm]);
 
   // Get active filters for display
   const getActiveFilters = () => {
@@ -813,35 +768,19 @@ const FantasyDashboard = () => {
     return () => document.removeEventListener('keydown', handleKeyboardShortcuts);
   }, [handleKeyboardShortcuts]);
 
-  // Fetch summary statistics
-  const fetchSummary = async () => {
-    try {
-      const response = await axios.get(`${API}/stats/summary`);
-      setSummary(response.data);
-    } catch (error) {
-      console.error('Error fetching summary:', error);
-      toast.error('Failed to fetch summary data');
-    }
-  };
 
   // Refresh data from NFL sources
   const refreshData = async () => {
-    setRefreshing(true);
     try {
-      toast.info('Refreshing NFL data and snap counts from sources...');
-      const response = await axios.post(`${API}/refresh-data?seasons=2024&seasons=2025`);
+      setRefreshing(true);
       
-      if (response.data.success) {
-        const message = `Successfully loaded ${response.data.records_loaded} player records${response.data.snap_records_loaded ? ` and ${response.data.snap_records_loaded} snap count records` : ''}`;
-        toast.success(message);
-        await fetchSummary();
-        await fetchPlayers();
-      } else {
-        toast.error('Failed to refresh data');
-      }
+      // Fetch player data
+      await fetchPlayersWithFilters();
+      
+      toast.success('Data refreshed successfully', { duration: 2000 });
     } catch (error) {
       console.error('Error refreshing data:', error);
-      toast.error('Failed to refresh data from NFL sources');
+      toast.error('Failed to refresh data', { duration: 3000 });
     } finally {
       setRefreshing(false);
     }
@@ -850,7 +789,6 @@ const FantasyDashboard = () => {
   // Initial data load
   useEffect(() => {
     fetchPlayersWithFilters();
-    fetchSummary();
   }, []);
 
   // PPR change handler
@@ -864,7 +802,7 @@ const FantasyDashboard = () => {
   // Refetch when filters change
   useEffect(() => {
     fetchPlayersWithFilters();
-  }, [filters, selectedPlayerType]);
+  }, [filters]);
 
   // Fetch trend data
   const fetchTrendData = async () => {
@@ -1383,15 +1321,37 @@ const FantasyDashboard = () => {
 
                       {/* Salary Filter */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">$</label>
-                        <Select value="all">
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="All" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <DollarSign className="h-3 w-3 inline mr-1" />
+                          Min Salary
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 5000"
+                          value={filters.minSalary}
+                          onChange={(e) => handleFilterChange('minSalary', e.target.value)}
+                          className="h-10"
+                          min="0"
+                          step="100"
+                        />
+                      </div>
+
+                      {/* Snap Count Filter */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <Activity className="h-3 w-3 inline mr-1" />
+                          Min Snap %
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 50"
+                          value={filters.minSnaps}
+                          onChange={(e) => handleFilterChange('minSnaps', e.target.value)}
+                          className="h-10"
+                          min="0"
+                          max="100"
+                          step="5"
+                        />
                       </div>
 
                       {/* PPR Toggle */}
@@ -1727,36 +1687,6 @@ const FantasyDashboard = () => {
                             )}
                           </tbody>
                         </table>
-                      </div>
-                    </div>
-                    
-                    {/* Depth Chart Section */}
-                    <div className="px-4 pb-4">
-                      <h4 className="text-sm font-bold mb-3 text-gray-700 uppercase tracking-wide">Depth Chart</h4>
-                      <div className="bg-gradient-to-r from-gray-50 to-white border rounded-lg p-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between py-2 px-3 bg-blue-100 rounded-lg border border-blue-200">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg font-bold text-blue-600">1</span>
-                              <span className="font-bold text-gray-900">{selectedPlayer?.player_name}</span>
-                            </div>
-                            <Badge className="bg-blue-600 text-white text-xs px-2 py-0.5">{selectedPlayer?.position}1</Badge>
-                          </div>
-                          <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg font-semibold text-gray-500">2</span>
-                              <span className="text-gray-600 text-sm">Backup Player</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">{selectedPlayer?.position}2</Badge>
-                          </div>
-                          <div className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg font-semibold text-gray-500">3</span>
-                              <span className="text-gray-600 text-sm">Third String</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">{selectedPlayer?.position}3</Badge>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -2563,6 +2493,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<FantasyDashboard />} />
+          <Route path="/data-table" element={<FantasyDashboard />} />
+          <Route path="/trend-tool" element={<FantasyDashboard />} />
         </Routes>
       </BrowserRouter>
     </div>
