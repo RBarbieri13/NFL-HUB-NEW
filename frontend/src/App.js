@@ -84,8 +84,6 @@ const FantasyDashboard = () => {
   const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
   const [playerGameHistory, setPlayerGameHistory] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(280); // pixels
-  const [isResizing, setIsResizing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'fantasy_points', direction: 'desc' });
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -96,7 +94,6 @@ const FantasyDashboard = () => {
     if (location.pathname === '/trend-tool') return 'trend-tool';
     return 'data-table';
   });
-  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
   
   // Trend Tool state
   const [trendFilters, setTrendFilters] = useState({
