@@ -193,37 +193,6 @@ const FantasyDashboard = () => {
     return colors[position] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-  // Handle sidebar resizing
-  const handleMouseDown = (e) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isResizing) return;
-    
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= 400) {
-      setSidebarWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  React.useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
-
   // Handle player click to open detail panel
   const handlePlayerClick = async (player) => {
     setSelectedPlayer(player);
