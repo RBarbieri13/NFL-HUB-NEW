@@ -13,6 +13,7 @@ import { Input } from './components/ui/input';
 import { RefreshCw, TrendingUp, Users, Calendar, Search, Filter, Star, BarChart3, Settings, Download, DollarSign, Database, Clock, Activity, Heart, Copy, Eye, Zap } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
+import OptimizerFilter from './components/OptimizerFilter';
 import '@/App.css';
 
 // Register AG Grid modules
@@ -114,6 +115,8 @@ const FantasyDashboard = () => {
   // New states for Trend Tool enhancements
   const [trendViewMode, setTrendViewMode] = useState('summary'); // 'summary' or 'full'
   const [trendFiltersCollapsed, setTrendFiltersCollapsed] = useState(false);
+  
+  const [showOptimizerFilter, setShowOptimizerFilter] = useState(false);
 
   // Calculate fantasy points based on PPR setting
   const calculateFantasyPoints = (player) => {
@@ -1087,6 +1090,12 @@ const FantasyDashboard = () => {
                   <Badge className="bg-green-500/20 text-green-100 border-green-400 text-xs px-3 py-1">
                     Live Data
                   </Badge>
+                  <Badge 
+                    className="bg-purple-500/20 text-purple-100 border-purple-400 text-xs px-3 py-1 cursor-pointer hover:bg-purple-500/30 transition-colors"
+                    onClick={() => setShowOptimizerFilter(!showOptimizerFilter)}
+                  >
+                    Optimizer {showOptimizerFilter ? '✓' : '(Beta)'}
+                  </Badge>
                 </div>
               </div>
               
@@ -1108,6 +1117,16 @@ const FantasyDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Optimizer Filter Component */}
+      <OptimizerFilter
+        isVisible={showOptimizerFilter}
+        onClose={() => setShowOptimizerFilter(false)}
+        currentPosition={filters.position}
+        currentWeek={filters.week}
+        onPositionChange={(position) => setFilters(prev => ({ ...prev, position }))}
+        onWeekChange={(week) => setFilters(prev => ({ ...prev, week }))}
+      />
 
       {/* Main Content Area - Full Width */}
       <div className="flex-1 overflow-hidden">
