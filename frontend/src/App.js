@@ -114,6 +114,7 @@ const FantasyDashboard = () => {
   
   // New states for Trend Tool enhancements
   const [trendFiltersCollapsed, setTrendFiltersCollapsed] = useState(false);
+  const [trendViewMode, setTrendViewMode] = useState('summary'); // 'summary' or 'full'
   
   const [showOptimizerFilter, setShowOptimizerFilter] = useState(false);
 
