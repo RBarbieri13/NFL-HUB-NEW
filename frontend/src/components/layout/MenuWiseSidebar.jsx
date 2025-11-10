@@ -46,28 +46,10 @@ const MenuWiseSidebar = ({ activeRoute, onNavigate }) => {
         </div>
       </nav>
 
-      {/* Filter Card Placeholder */}
+      {/* Filter Card Placeholder - Temporarily hidden to avoid double sidebar appearance */}
+      {/* Will be re-enabled when filters are migrated from main content area */}
       <div className="px-3 flex-1 overflow-auto border-t border-slate-200">
-        <div className="py-4">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
-            <div className="px-3 py-2 border-b border-slate-200 bg-slate-50/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-3.5 w-3.5 text-slate-500" />
-                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                    Filters
-                  </span>
-                </div>
-                <span className="text-xs text-slate-500">(Placeholder)</span>
-              </div>
-            </div>
-            <div className="p-3">
-              <p className="text-xs text-slate-500">
-                Filters will be moved here in the next PR
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* Placeholder removed - filters still in main content area */}
       </div>
 
       {/* Footer Placeholder */}
