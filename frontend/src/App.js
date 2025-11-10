@@ -1357,7 +1357,6 @@ const FantasyDashboard = () => {
                 </Card>
               )}
             </div>
-          </div>
         )}
         
         {/* Trend Tool Tab Content */}
