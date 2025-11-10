@@ -1046,8 +1046,8 @@ const FantasyDashboard = () => {
 
         {/* Content Area - Full Width */}
         <div className="flex-1 overflow-auto">
-        {/* Tab Content */}
-        {activeTab === 'data-table' && (
+          {/* Tab Content */}
+          {activeTab === 'data-table' && (
           <div className="h-full p-6 flex gap-4 overflow-hidden">
               {/* Main Data Grid */}
               <Card 
