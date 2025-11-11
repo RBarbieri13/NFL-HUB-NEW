@@ -1,6 +1,14 @@
-# Here are your Instructions
+# NFL Hub - Fantasy Football Analytics Dashboard
 
-Updated via Desktop Commander to trigger CI deploy.
+DraftKings Analytics & Player Stats application with React frontend and FastAPI backend.
+
+## 🚀 Quick Start
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment guide.
+
+**Production URLs:**
+- Frontend: https://ruberube.vercel.app
+- Backend: https://nfl-hub-new-1.onrender.com
 
 ## Testing URL (auto-updating) setup
 
