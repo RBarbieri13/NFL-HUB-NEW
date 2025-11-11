@@ -14,6 +14,7 @@ import { RefreshCw, TrendingUp, Users, Calendar, Search, Filter, Star, BarChart3
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import OptimizerFilter from './components/OptimizerFilter';
+import MenuWiseSidebar from './components/layout/MenuWiseSidebar';
 import '@/App.css';
 
 // Register AG Grid modules
@@ -83,8 +84,6 @@ const FantasyDashboard = () => {
   const [playerDetailOpen, setPlayerDetailOpen] = useState(false);
   const [playerGameHistory, setPlayerGameHistory] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(280); // pixels
-  const [isResizing, setIsResizing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'fantasy_points', direction: 'desc' });
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -95,7 +94,6 @@ const FantasyDashboard = () => {
     if (location.pathname === '/trend-tool') return 'trend-tool';
     return 'data-table';
   });
-  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
   
   // Trend Tool state
   const [trendFilters, setTrendFilters] = useState({
@@ -116,6 +114,7 @@ const FantasyDashboard = () => {
   
   // New states for Trend Tool enhancements
   const [trendFiltersCollapsed, setTrendFiltersCollapsed] = useState(false);
+  const [trendViewMode, setTrendViewMode] = useState('summary'); // 'summary' or 'full'
   
   const [showOptimizerFilter, setShowOptimizerFilter] = useState(false);
 
@@ -194,37 +193,6 @@ const FantasyDashboard = () => {
     };
     return colors[position] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
-
-  // Handle sidebar resizing
-  const handleMouseDown = (e) => {
-    setIsResizing(true);
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isResizing) return;
-    
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= 400) {
-      setSidebarWidth(newWidth);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsResizing(false);
-  };
-
-  React.useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing]);
 
   // Handle player click to open detail panel
   const handlePlayerClick = async (player) => {
@@ -995,11 +963,21 @@ const FantasyDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="flex h-screen bg-gray-50">
       <Toaster position="top-right" />
       
-      {/* Professional Header with Texture */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b-4 border-blue-500">
+      {/* MenuWise Sidebar - New */}
+      <div className="w-72 flex-shrink-0">
+        <MenuWiseSidebar 
+          activeRoute={location.pathname}
+          onNavigate={(path) => navigate(path)}
+        />
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Professional Header with Texture */}
+        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 shadow-2xl border-b-4 border-blue-500">
         <div className="relative overflow-hidden">
           {/* Texture overlay */}
           <div className="absolute inset-0 bg-black/20 bg-[radial-gradient(circle_at_20%_80%,_rgba(120,_119,_198,_0.3),_transparent_50%)]"></div>
@@ -1056,335 +1034,21 @@ const FantasyDashboard = () => {
         </div>
       </div>
 
-      {/* Optimizer Filter Component */}
-      <OptimizerFilter
-        isVisible={showOptimizerFilter}
-        onClose={() => setShowOptimizerFilter(false)}
-        currentPosition={filters.position}
-        currentWeek={filters.week}
-        onPositionChange={(position) => setFilters(prev => ({ ...prev, position }))}
-        onWeekChange={(week) => setFilters(prev => ({ ...prev, week }))}
-      />
+        {/* Optimizer Filter Component */}
+        <OptimizerFilter
+          isVisible={showOptimizerFilter}
+          onClose={() => setShowOptimizerFilter(false)}
+          currentPosition={filters.position}
+          currentWeek={filters.week}
+          onPositionChange={(position) => setFilters(prev => ({ ...prev, position }))}
+          onWeekChange={(week) => setFilters(prev => ({ ...prev, week }))}
+        />
 
-      {/* Main Content Area - Full Width */}
-      <div className="flex-1 overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="bg-white border-b border-gray-200 px-6 py-2">
-          <div className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('data-table')}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'data-table'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Data Table
-            </button>
-            <button
-              onClick={() => setActiveTab('trend-tool')}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'trend-tool'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Trend Tool
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'data-table' && (
-          <div className="flex h-full">
-            {/* Left Sidebar Filters */}
-            <div 
-              className={`bg-gray-50 border-r border-gray-200 transition-all duration-300 ${filtersCollapsed ? 'w-16' : ''} flex-shrink-0 relative`}
-              style={{ width: filtersCollapsed ? '64px' : `${sidebarWidth}px` }}
-            >
-              {/* Resize Handle */}
-              {!filtersCollapsed && (
-                <div
-                  className="absolute right-0 top-0 w-1 h-full bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors"
-                  onMouseDown={(e) => {
-                    setIsResizing(true);
-                    const startX = e.clientX;
-                    const startWidth = sidebarWidth;
-                    
-                    const handleMouseMove = (e) => {
-                      const newWidth = Math.max(200, Math.min(500, startWidth + (e.clientX - startX)));
-                      setSidebarWidth(newWidth);
-                    };
-                    
-                    const handleMouseUp = () => {
-                      setIsResizing(false);
-                      document.removeEventListener('mousemove', handleMouseMove);
-                      document.removeEventListener('mouseup', handleMouseUp);
-                    };
-                    
-                    document.addEventListener('mousemove', handleMouseMove);
-                    document.addEventListener('mouseup', handleMouseUp);
-                  }}
-                />
-              )}
-              <div className="p-4 h-full">
-                {/* Filter Toggle Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFiltersCollapsed(!filtersCollapsed)}
-                  className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 mb-4"
-                >
-                  <Filter className="h-4 w-4" />
-                  {!filtersCollapsed && <span>Filters</span>}
-                </Button>
-                
-                {!filtersCollapsed && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <div className="space-y-4">
-                      {/* Season Filter */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Season</label>
-                        <Select value={filters.season} onValueChange={(value) => handleFilterChange('season', value)}>
-                          <SelectTrigger className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2025">2025</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Week Range */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Week Range
-                        </label>
-                        <div className="space-y-2">
-                          {/* Toggle between single week and range */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <Button
-                              size="sm"
-                              variant={!filters.weekStart ? "default" : "outline"}
-                              className="h-7 px-2 py-0 text-xs"
-                              onClick={() => {
-                                setFilters(prev => ({
-                                  ...prev,
-                                  weekStart: null,
-                                  weekEnd: null,
-                                  week: '4'
-                                }));
-                              }}
-                            >
-                              Single
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={filters.weekStart ? "default" : "outline"}
-                              className="h-7 px-2 py-0 text-xs"
-                              onClick={() => {
-                                setFilters(prev => ({
-                                  ...prev,
-                                  weekStart: '1',
-                                  weekEnd: '4',
-                                  week: null
-                                }));
-                              }}
-                            >
-                              Range
-                            </Button>
-                          </div>
-                          
-                          {/* Single week selector */}
-                          {!filters.weekStart && (
-                            <Select 
-                              value={filters.week} 
-                              onValueChange={(value) => {
-                                setFilters(prev => ({
-                                  ...prev,
-                                  week: value,
-                                  weekStart: null,
-                                  weekEnd: null
-                                }));
-                              }}
-                            >
-                              <SelectTrigger className="h-10">
-                                <SelectValue placeholder="Week" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">All Weeks</SelectItem>
-                                {Array.from({length: 18}, (_, i) => (
-                                  <SelectItem key={i + 1} value={(i + 1).toString()}>
-                                    Week {i + 1}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                          
-                          {/* Week range selectors */}
-                          {filters.weekStart && (
-                            <div className="flex gap-2">
-                              <Select 
-                                value={filters.weekStart} 
-                                onValueChange={(value) => {
-                                  setFilters(prev => ({
-                                    ...prev,
-                                    weekStart: value,
-                                    // Ensure end week is not less than start week
-                                    weekEnd: prev.weekEnd && parseInt(prev.weekEnd) < parseInt(value) 
-                                      ? value 
-                                      : prev.weekEnd
-                                  }));
-                                }}
-                              >
-                                <SelectTrigger className="h-10 flex-1">
-                                  <SelectValue placeholder="From" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({length: 18}, (_, i) => (
-                                    <SelectItem key={i + 1} value={(i + 1).toString()}>
-                                      {i + 1}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              
-                              <span className="flex items-center text-gray-500">to</span>
-                              
-                              <Select 
-                                value={filters.weekEnd} 
-                                onValueChange={(value) => {
-                                  setFilters(prev => ({
-                                    ...prev,
-                                    weekEnd: value,
-                                    // Ensure start week is not greater than end week
-                                    weekStart: prev.weekStart && parseInt(prev.weekStart) > parseInt(value) 
-                                      ? value 
-                                      : prev.weekStart
-                                  }));
-                                }}
-                              >
-                                <SelectTrigger className="h-10 flex-1">
-                                  <SelectValue placeholder="To" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({length: 18}, (_, i) => (
-                                    <SelectItem 
-                                      key={i + 1} 
-                                      value={(i + 1).toString()}
-                                      disabled={filters.weekStart && (i + 1) < parseInt(filters.weekStart)}
-                                    >
-                                      {i + 1}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Position Filter */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Pos</label>
-                        <Select value={filters.position} onValueChange={(value) => handleFilterChange('position', value)}>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="QB" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="QB">QB</SelectItem>
-                            <SelectItem value="RB">RB</SelectItem>
-                            <SelectItem value="WR">WR</SelectItem>
-                            <SelectItem value="TE">TE</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Team Filter */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
-                        <Select value={filters.team} onValueChange={(value) => handleFilterChange('team', value)}>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="All" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                            {Object.entries(NFL_TEAMS).map(([abbr, name]) => (
-                              <SelectItem key={abbr} value={abbr}>{abbr}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Salary Filter */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          <DollarSign className="h-3 w-3 inline mr-1" />
-                          Min Salary
-                        </label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 5000"
-                          value={filters.minSalary}
-                          onChange={(e) => handleFilterChange('minSalary', e.target.value)}
-                          className="h-10"
-                          min="0"
-                          step="100"
-                        />
-                      </div>
-
-                      {/* Snap Count Filter */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          <Activity className="h-3 w-3 inline mr-1" />
-                          Min Snap %
-                        </label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 50"
-                          value={filters.minSnaps}
-                          onChange={(e) => handleFilterChange('minSnaps', e.target.value)}
-                          className="h-10"
-                          min="0"
-                          max="100"
-                          step="5"
-                        />
-                      </div>
-
-                      {/* PPR Toggle */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Scoring</label>
-                        <Select value={isPPR ? 'ppr' : 'half-ppr'} onValueChange={(value) => setIsPPR(value === 'ppr')}>
-                          <SelectTrigger className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ppr">PPR</SelectItem>
-                            <SelectItem value="half-ppr">Half PPR</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Auto-apply indicator */}
-                    <div className="mt-4 flex justify-center">
-                      <div className="text-xs text-gray-500">
-                        <span className="inline-flex items-center">
-                          <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-                          Auto-apply
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Main Data Table Content */}
-            <div className="flex-1 p-6 flex gap-4 overflow-hidden">
+        {/* Content Area - Full Width */}
+        <div className="flex-1 overflow-auto">
+          {/* Tab Content */}
+          {activeTab === 'data-table' && (
+          <div className="h-full p-6 flex gap-4 overflow-hidden">
               {/* Main Data Grid */}
               <Card 
                 className="shadow-lg border-0 bg-white transition-all duration-300 ease-in-out" 
@@ -1693,7 +1357,6 @@ const FantasyDashboard = () => {
                 </Card>
               )}
             </div>
-          </div>
         )}
         
         {/* Trend Tool Tab Content */}
@@ -2482,6 +2145,7 @@ const FantasyDashboard = () => {
             </Card>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
