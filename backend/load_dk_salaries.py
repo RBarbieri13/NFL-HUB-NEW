@@ -78,11 +78,10 @@ for sheet_name in xl.sheet_names:
             # Try to insert
             try:
                 conn.execute("""
-                    INSERT INTO draftkings_pricing 
-                    (id, player_name, team, position, season, week, salary, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO draftkings_pricing
+                    (player_name, team, position, season, week, salary, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    str(uuid.uuid4()),
                     name,
                     team,
                     position,
