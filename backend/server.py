@@ -23,6 +23,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import re
 
+# Import optimized data loader
+from optimized_data_loader import OptimizedDataLoader, OptimizedAPIClient
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -38,6 +41,13 @@ conn = duckdb.connect(str(db_path))
 
 # Thread pool for async operations
 executor = ThreadPoolExecutor(max_workers=3)
+
+# Initialize optimized data loader and API client
+optimized_loader = OptimizedDataLoader(conn)
+optimized_api_client = OptimizedAPIClient(
+    api_key="31cd7fd5cfmsh0039d0aaa4b3cf4p187526jsn4273673a1752",
+    api_host="tank01-nfl-live-in-game-real-time-statistics-nfl.p.rapidapi.com"
+)
 
 # DraftKings PPR Scoring System
 DRAFTKINGS_SCORING = {
@@ -228,160 +238,19 @@ def calculate_fantasy_points(stats: Dict) -> float:
     return round(points, 2)
 
 def fetch_draftkings_salaries(season: int, week: int) -> Dict:
-    """Fetch DraftKings salaries from RapidAPI for specific season/week"""
-    url = f"https://{RAPIDAPI_HOST}/getDFSsalaries"
-    
-    querystring = {
-        "week": str(week),
-        "season": str(season),
-        "site": "draftkings"
-    }
-    
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": RAPIDAPI_HOST,
-        "Content-Type": "application/json"
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=15)
-        response.raise_for_status()
-        
-        data = response.json()
-        logging.info(f"DraftKings API response received for season {season}, week {week}")
-        
-        processed_data = []
-        if 'body' in data and 'draftkings' in data['body']:
-            for player in data['body']['draftkings']:
-                # Filter for offensive positions only
-                position = player.get('pos', '').upper()
-                if position in SKILL_POSITIONS:
-                    # Parse salary (handle both string and numeric)
-                    salary_raw = player.get('salary', 0)
-                    if isinstance(salary_raw, str):
-                        salary = int(salary_raw.replace('$', '').replace(',', '')) if salary_raw else 0
-                    else:
-                        salary = int(salary_raw) if salary_raw else 0
-                    
-                    processed_data.append({
-                        'player_name': player.get('longName', ''),
-                        'team': player.get('team', '').upper(),
-                        'position': position,
-                        'salary': salary,
-                        'dk_player_id': player.get('playerID', ''),
-                        'season': season,
-                        'week': week
-                    })
-        
-        return {
-            'success': True,
-            'data': processed_data,
-            'count': len(processed_data)
-        }
-        
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error fetching DraftKings salaries for {season} week {week}: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'data': []
-        }
-    except Exception as e:
-        logging.error(f"Unexpected error in DraftKings API for {season} week {week}: {e}")
-        return {
-            'success': False,
-            'error': str(e),
-            'data': []
-        }
+    """Fetch DraftKings salaries using optimized API client"""
+    return optimized_api_client.fetch_draftkings_salaries_cached(season, week)
 
 def load_snap_counts_for_seasons(seasons: List[int]) -> Dict:
-    """Load snap counts for specified seasons using nflreadpy"""
+    """Load snap counts using optimized loader"""
     try:
-        total_loaded = 0
-        
-        for season in seasons:
-            logging.info(f"Loading snap counts for season {season}")
-            
-            try:
-                # Load snap counts using nflreadpy
-                snap_counts_data = nfl.load_snap_counts(seasons=[season])
-                
-                if snap_counts_data is not None and len(snap_counts_data) > 0:
-                    # Convert Polars to Pandas
-                    snap_counts_pd = snap_counts_data.to_pandas()
-                    
-                    # Filter for skill positions and regular season games
-                    if 'game_type' in snap_counts_pd.columns:
-                        snap_counts_pd = snap_counts_pd[snap_counts_pd['game_type'] == 'REG']
-                        logging.info(f"After filtering for regular season: {len(snap_counts_pd)} records")
-                    
-                    # Filter for skill positions only
-                    snap_counts_pd = snap_counts_pd[snap_counts_pd['position'].isin(SKILL_POSITIONS)]
-                    logging.info(f"After filtering for skill positions: {len(snap_counts_pd)} records")
-                    
-                    # Filter for players with offensive snaps (ensure column exists and has data)
-                    if 'offense_snaps' in snap_counts_pd.columns:
-                        snap_counts_pd = snap_counts_pd[snap_counts_pd['offense_snaps'] > 0]
-                        logging.info(f"After filtering for offense_snaps > 0: {len(snap_counts_pd)} records")
-                    else:
-                        logging.warning("No 'offense_snaps' column found in data")
-                    
-                    if len(snap_counts_pd) > 0:
-                        # Create unique ID for each record - use simpler approach
-                        snap_counts_pd['id'] = snap_counts_pd.apply(
-                            lambda row: f"{row.get('season', '')}_{row.get('week', '')}_{row.get('team', '')}_{row.get('player', '').replace(' ', '_')}", axis=1
-                        )
-                        
-                        # Delete existing data for this season
-                        conn.execute("DELETE FROM snap_counts WHERE season = ?", [season])
-                        
-                        # Register DataFrame with DuckDB
-                        conn.register('snap_counts_df', snap_counts_pd)
-                        
-                        # Insert snap counts data
-                        conn.execute("""
-                            INSERT INTO snap_counts 
-                            SELECT 
-                                id,
-                                COALESCE(pfr_player_id, '') as player_id,
-                                player as player_name,
-                                team,
-                                season,
-                                week,
-                                COALESCE(offense_snaps, 0) as offense_snaps,
-                                COALESCE(offense_pct, 0.0) as offense_pct,
-                                COALESCE(defense_snaps, 0) as defense_snaps,
-                                COALESCE(defense_pct, 0.0) as defense_pct,
-                                COALESCE(st_snaps, 0) as st_snaps,
-                                COALESCE(st_pct, 0.0) as st_pct,
-                                position,
-                                COALESCE(pfr_game_id, game_id, '') as game_id,
-                                COALESCE(opponent, '') as opponent_team,
-                                CURRENT_TIMESTAMP as created_at
-                            FROM snap_counts_df
-                        """)
-                        
-                        snap_count = len(snap_counts_pd)
-                        total_loaded += snap_count
-                        logging.info(f"Loaded {snap_count} snap count records for season {season}")
-                    else:
-                        logging.warning(f"No skill position snap counts found for season {season}")
-                else:
-                    logging.warning(f"No snap counts data returned for season {season}")
-                    
-            except Exception as e:
-                logging.error(f"Error loading snap counts for season {season}: {e}")
-                logging.error(traceback.format_exc())
-                continue
-        
+        result = optimized_loader.load_snap_counts_optimized(seasons)
         return {
             'success': True,
-            'total_loaded': total_loaded
+            'total_loaded': result['total_loaded']
         }
-        
     except Exception as e:
-        logging.error(f"Error in load_snap_counts_for_seasons: {e}")
-        logging.error(traceback.format_exc())
+        logging.error(f"Error in optimized load_snap_counts_for_seasons: {e}")
         return {
             'success': False,
             'error': str(e),
@@ -440,66 +309,62 @@ def cache_draftkings_pricing(pricing_data: List[Dict], season: int, week: int) -
         return 0
 
 def load_historical_draftkings_data(start_season: int = 2024, end_season: int = 2025) -> Dict:
-    """Load historical DraftKings data for all weeks from start_season to current"""
-    total_cached = 0
-    total_weeks_processed = 0
-    errors = []
-    
-    current_date = datetime.now()
-    current_season = current_date.year if current_date.month >= 9 else current_date.year - 1
-    
-    for season in range(start_season, end_season + 1):
-        # Determine max week for each season
-        if season < current_season:
-            max_week = 18  # Full season for past years
-        elif season == current_season:
-            # For current season, estimate current week (rough calculation)
-            if current_date.month >= 9:  # Season started
-                weeks_since_start = (current_date - datetime(season, 9, 1)).days // 7
-                max_week = min(max(weeks_since_start, 1), 18)
-            else:
-                max_week = 1
-        else:
-            continue  # Future seasons
+    """Load historical DraftKings data using optimized batch processing"""
+    try:
+        current_date = datetime.now()
+        current_season = current_date.year if current_date.month >= 9 else current_date.year - 1
         
-        for week in range(1, max_week + 1):
-            # Skip if already cached (unless it's current week of current season)
-            if season == current_season and week == max_week:
-                # Always refresh current week
-                pass
-            elif is_pricing_cached(season, week):
-                logging.info(f"Skipping cached data for season {season}, week {week}")
-                continue
-            
-            try:
-                logging.info(f"Fetching DraftKings data for season {season}, week {week}")
-                result = fetch_draftkings_salaries(season, week)
-                
-                if result['success'] and result['data']:
-                    cached = cache_draftkings_pricing(result['data'], season, week)
-                    total_cached += cached
-                    logging.info(f"Successfully cached {cached} records for season {season}, week {week}")
+        # Collect all season/week pairs that need to be loaded
+        season_week_pairs = []
+        
+        for season in range(start_season, end_season + 1):
+            # Determine max week for each season
+            if season < current_season:
+                max_week = 18  # Full season for past years
+            elif season == current_season:
+                # For current season, estimate current week
+                if current_date.month >= 9:  # Season started
+                    weeks_since_start = (current_date - datetime(season, 9, 1)).days // 7
+                    max_week = min(max(weeks_since_start, 1), 18)
                 else:
-                    error_msg = f"No data for season {season}, week {week}: {result.get('error', 'Unknown error')}"
-                    errors.append(error_msg)
-                    logging.warning(error_msg)
-                
-                total_weeks_processed += 1
-                
-                # Rate limiting - wait between requests
-                time.sleep(1)
-                
-            except Exception as e:
-                error_msg = f"Error processing season {season}, week {week}: {str(e)}"
-                errors.append(error_msg)
-                logging.error(error_msg)
-                continue
-    
-    return {
-        'total_cached': total_cached,
-        'weeks_processed': total_weeks_processed,
-        'errors': errors
-    }
+                    max_week = 1
+            else:
+                continue  # Future seasons
+            
+            for week in range(1, max_week + 1):
+                # Skip if already cached (unless it's current week of current season)
+                if season == current_season and week == max_week:
+                    # Always refresh current week
+                    season_week_pairs.append((season, week))
+                elif not is_pricing_cached(season, week):
+                    season_week_pairs.append((season, week))
+        
+        if not season_week_pairs:
+            logging.info("No new DraftKings data to load - all weeks are cached")
+            return {
+                'total_cached': 0,
+                'weeks_processed': 0,
+                'errors': []
+            }
+        
+        logging.info(f"Loading DraftKings data for {len(season_week_pairs)} season/week pairs using batch processing")
+        
+        # Use optimized batch loading
+        result = optimized_api_client.batch_load_draftkings_data(season_week_pairs, conn)
+        
+        return {
+            'total_cached': result.get('records_processed', 0),
+            'weeks_processed': result.get('successful_loads', 0),
+            'errors': [] if result.get('success', False) else [result.get('message', 'Unknown error')]
+        }
+        
+    except Exception as e:
+        logging.error(f"Error in optimized load_historical_draftkings_data: {e}")
+        return {
+            'total_cached': 0,
+            'weeks_processed': 0,
+            'errors': [str(e)]
+        }
 
 async def load_draftkings_pricing_from_sheets():
     """Load DraftKings pricing data from Google Sheets for weeks 4 and 5"""
@@ -1734,187 +1599,12 @@ def init_database():
         raise
 
 def load_nfl_data_sync(seasons: List[int]) -> Dict[str, int]:
-    """Load NFL data synchronously for async wrapper"""
+    """Load NFL data synchronously using optimized loader"""
     try:
-        total_records = 0
-        snap_records = 0
-        
-        for season in seasons:
-            logging.info(f"Loading data for season {season}")
-            
-            # Load player stats
-            try:
-                player_stats = nfl.load_player_stats(seasons=[season])
-                logging.info(f"Player stats type: {type(player_stats)}, length: {len(player_stats) if player_stats is not None else 'None'}")
-                
-                if player_stats is not None and len(player_stats) > 0:
-                    # Convert Polars to Pandas for easier processing
-                    player_stats_pd = player_stats.to_pandas()
-                    
-                    # Filter for relevant positions
-                    relevant_positions = ['QB', 'RB', 'WR', 'TE']
-                    filtered_stats = player_stats_pd[player_stats_pd['position'].isin(relevant_positions)].copy()
-                    
-                    # Use existing fantasy_points column (or fantasy_points_ppr for PPR)
-                    if 'fantasy_points_ppr' in filtered_stats.columns:
-                        filtered_stats['fantasy_points'] = filtered_stats['fantasy_points_ppr']
-                    elif 'fantasy_points' not in filtered_stats.columns:
-                        # Fallback to calculation if neither column exists
-                        filtered_stats['fantasy_points'] = filtered_stats.apply(
-                            lambda row: calculate_fantasy_points(row.to_dict()), axis=1
-                        )
-                    
-                    # Create unique ID for each record
-                    filtered_stats['id'] = filtered_stats.apply(
-                        lambda row: f"{row['player_id']}_{row['season']}_{row['week']}", axis=1
-                    )
-                    
-                    # Insert into database
-                    conn.execute("DELETE FROM weekly_stats WHERE season = ?", [season])
-                    conn.register('stats_df', filtered_stats)
-                    conn.execute("""
-                        INSERT INTO weekly_stats 
-                        SELECT 
-                            id,
-                            player_id,
-                            player_display_name as player_name,
-                            position,
-                            team,
-                            season,
-                            week,
-                            opponent_team as opponent,
-                            COALESCE(passing_yards, 0) as passing_yards,
-                            COALESCE(passing_tds, 0) as passing_tds,
-                            COALESCE(passing_interceptions, 0) as interceptions,
-                            COALESCE(rushing_yards, 0) as rushing_yards,
-                            COALESCE(rushing_tds, 0) as rushing_tds,
-                            COALESCE(receptions, 0) as receptions,
-                            COALESCE(receiving_yards, 0) as receiving_yards,
-                            COALESCE(receiving_tds, 0) as receiving_tds,
-                            COALESCE(targets, 0) as targets,
-                            COALESCE(rushing_fumbles_lost, 0) + COALESCE(receiving_fumbles_lost, 0) as fumbles_lost,
-                            fantasy_points,
-                            NULL as snap_percentage,
-                            NULL as dk_salary,
-                            CURRENT_TIMESTAMP as created_at
-                        FROM stats_df
-                    """)
-                    
-                    records_count = len(filtered_stats)
-                    total_records += records_count
-                    logging.info(f"Loaded {records_count} player stat records for season {season}")
-                    
-            except Exception as e:
-                logging.error(f"Error loading player stats for season {season}: {e}")
-                continue
-        
-        # Load snap counts for all seasons at once (more efficient)
-        try:
-            logging.info(f"Loading snap counts for seasons: {seasons}")
-            snap_result = load_snap_counts_for_seasons(seasons)
-            if snap_result['success']:
-                snap_records = snap_result['total_loaded']
-                logging.info(f"Successfully loaded {snap_records} snap count records")
-            else:
-                logging.error(f"Failed to load snap counts: {snap_result.get('error', 'Unknown error')}")
-        except Exception as e:
-            logging.error(f"Error loading snap counts: {e}")
-        
-        # Update weekly_stats with snap percentages from the enhanced snap_counts table
-        try:
-            # First, let's see what snap count data we actually have
-            snap_check = conn.execute("SELECT COUNT(*) FROM snap_counts").fetchone()[0]
-            logging.info(f"Total snap count records available: {snap_check}")
-            
-            if snap_check > 0:
-                # Update with more flexible matching
-                updates = conn.execute("""
-                    UPDATE weekly_stats 
-                    SET snap_percentage = (
-                        SELECT sc.offense_pct 
-                        FROM snap_counts sc 
-                        WHERE (
-                            UPPER(TRIM(sc.player_name)) = UPPER(TRIM(weekly_stats.player_name))
-                        )
-                          AND sc.team = weekly_stats.team
-                          AND sc.season = weekly_stats.season 
-                          AND sc.week = weekly_stats.week
-                        ORDER BY sc.offense_pct DESC
-                        LIMIT 1
-                    )
-                    WHERE EXISTS (
-                        SELECT 1 FROM snap_counts sc 
-                        WHERE (
-                            UPPER(TRIM(sc.player_name)) = UPPER(TRIM(weekly_stats.player_name))
-                        )
-                          AND sc.team = weekly_stats.team
-                          AND sc.season = weekly_stats.season 
-                          AND sc.week = weekly_stats.week
-                    )
-                """)
-                logging.info("Updated weekly_stats with snap percentages")
-                
-                # Check how many got updated
-                updated_count = conn.execute("SELECT COUNT(*) FROM weekly_stats WHERE snap_percentage IS NOT NULL AND snap_percentage > 0").fetchone()[0]
-                logging.info(f"Players with snap percentages after update: {updated_count}")
-            else:
-                logging.warning("No snap count data available to update")
-        except Exception as e:
-            logging.error(f"Error updating snap percentages: {e}")
-        
-        # Update weekly_stats with DraftKings salaries from cached data
-        try:
-            # Check available pricing data
-            pricing_check = conn.execute("SELECT COUNT(*) FROM draftkings_pricing").fetchone()[0]
-            logging.info(f"Total DraftKings pricing records available: {pricing_check}")
-            
-            if pricing_check > 0:
-                # Clear any existing dk_salary data that might be showing dates
-                conn.execute("UPDATE weekly_stats SET dk_salary = NULL")
-                
-                # Update with proper salary formatting
-                updates = conn.execute("""
-                    UPDATE weekly_stats 
-                    SET dk_salary = (
-                        SELECT CASE 
-                            WHEN dp.salary >= 10000 THEN '$' || CAST(ROUND(dp.salary / 1000.0, 1) AS VARCHAR) || 'k'
-                            WHEN dp.salary >= 1000 THEN '$' || CAST(ROUND(dp.salary / 1000.0, 1) AS VARCHAR) || 'k'
-                            WHEN dp.salary > 0 THEN '$' || CAST(dp.salary AS VARCHAR)
-                            ELSE NULL
-                        END
-                        FROM draftkings_pricing dp 
-                        WHERE UPPER(TRIM(dp.player_name)) = UPPER(TRIM(weekly_stats.player_name))
-                          AND dp.team = weekly_stats.team 
-                          AND dp.season = weekly_stats.season 
-                          AND dp.week = weekly_stats.week
-                        ORDER BY dp.salary DESC
-                        LIMIT 1
-                    )
-                    WHERE EXISTS (
-                        SELECT 1 FROM draftkings_pricing dp 
-                        WHERE UPPER(TRIM(dp.player_name)) = UPPER(TRIM(weekly_stats.player_name))
-                          AND dp.team = weekly_stats.team 
-                          AND dp.season = weekly_stats.season 
-                          AND dp.week = weekly_stats.week
-                    )
-                """)
-                logging.info("Updated weekly_stats with DraftKings salaries")
-                
-                # Check how many got updated
-                updated_count = conn.execute("SELECT COUNT(*) FROM weekly_stats WHERE dk_salary IS NOT NULL").fetchone()[0]
-                logging.info(f"Players with DraftKings salaries after update: {updated_count}")
-            else:
-                logging.warning("No DraftKings pricing data available to update")
-        except Exception as e:
-            logging.error(f"Error updating DraftKings salaries: {e}")
-        
-        return {
-            "total_records": total_records,
-            "snap_records": snap_records
-        }
-        
+        logging.info(f"Using optimized data loader for seasons: {seasons}")
+        return optimized_loader.load_nfl_data_optimized(seasons)
     except Exception as e:
-        logging.error(f"Error in load_nfl_data_sync: {e}")
+        logging.error(f"Error in optimized load_nfl_data_sync: {e}")
         logging.error(traceback.format_exc())
         raise
 
